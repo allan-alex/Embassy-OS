@@ -8,6 +8,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 #[derive(Debug)]
 enum MotorCommand {
     Stop,
+    SetSpeed(u32),
 }
 
 // A shared channel that can hold one command.
@@ -28,6 +29,9 @@ async fn sensor() {
     CHANNEL.send(MotorCommand::Stop).await;
 
     println!("Sensor: Stop command sent!");
+
+    // Timer::after(Duration::from_secs(5)).await;
+    CHANNEL.send(MotorCommand::SetSpeed(100)).await;
 }    
 
 #[embassy_executor::task]
@@ -46,16 +50,21 @@ async fn motor() {
     let mut motor_rpm = 50;
 
     println!("Motor: Running at {} RPM", motor_rpm);
-    println!("Motor: Waiting for a command...");
 
-    // Wait until another task sends a command.
-    let command = CHANNEL.receive().await;
+    loop {
+        println!("Motor: Waiting for a command...");
 
-    match command {
-        MotorCommand::Stop => {
-            motor_rpm = 0;
-            println!("Motor: Stop command received!");
-            println!("Motor: Speed is now {} RPM", motor_rpm);
+        let command = CHANNEL.receive().await;
+
+        match command {
+            MotorCommand::Stop => {
+                motor_rpm = 0;
+                println!("Motor: Stopped. Speed is {} RPM", motor_rpm);
+            }
+            MotorCommand::SetSpeed(speed) => {
+                motor_rpm = speed;
+                println!("Motor: Speed is now {} RPM", motor_rpm);
+            }
         }
     }
 }
