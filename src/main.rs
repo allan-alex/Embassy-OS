@@ -3,6 +3,7 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use embassy_sync::channel::Channel;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
 
 // A command that the sensor can send to the motor.
 #[derive(Debug)]
@@ -13,8 +14,11 @@ enum MotorCommand {
 
 // A shared channel that can hold one command.
 // 1 means the channel can hold one message at a time.
-static CHANNEL: Channel<CriticalSectionRawMutex, MotorCommand, 1> =
+static CHANNEL: Channel<CriticalSectionRawMutex, MotorCommand, 2> =
     Channel::new();
+
+static MOTOR_SPEED: Signal<CriticalSectionRawMutex, u32> =
+    Signal::new();    
 
 #[embassy_executor::task]
 async fn sensor() {
@@ -32,18 +36,8 @@ async fn sensor() {
 
     // Timer::after(Duration::from_secs(5)).await;
     CHANNEL.send(MotorCommand::SetSpeed(100)).await;
+    MOTOR_SPEED.signal(100);
 }    
-
-#[embassy_executor::task]
-async fn timer() {
-    let mut counter = 0;
-    loop {
-        println!("Hello World from Embassy! {}", counter);
-        counter += 1;
-
-        Timer::after(Duration::from_secs(1)).await;
-    }
-}
 
 #[embassy_executor::task]
 async fn motor() {
@@ -53,6 +47,10 @@ async fn motor() {
 
     loop {
         println!("Motor: Waiting for a command...");
+
+        let speed = MOTOR_SPEED.wait().await;
+        motor_rpm = speed;
+        println!("Motor target speed: {} RPM", motor_rpm);
 
         let command = CHANNEL.receive().await;
 
